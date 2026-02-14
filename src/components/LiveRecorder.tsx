@@ -28,34 +28,17 @@ const LiveRecorder = ({ onBack, onTranscriptionReady, isTranscribing }: LiveReco
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animFrameRef = useRef<number | null>(null);
 
-  const startRecording = useCallback(async () => {
+  const setupAudioCapture = useCallback((audio: HTMLAudioElement) => {
     try {
-      const audio = audioRef.current;
-      if (!audio) return;
-
-      // Set up HLS
-      if (Hls.isSupported()) {
-        const hls = new Hls();
-        hls.loadSource(HLS_URL);
-        hls.attachMedia(audio);
-        hlsRef.current = hls;
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          audio.play();
-        });
-      } else if (audio.canPlayType("application/vnd.apple.mpegurl")) {
-        audio.src = HLS_URL;
-        audio.play();
-      }
-
-      // Capture audio via Web Audio API
       const audioContext = new AudioContext();
       const source = audioContext.createMediaElementSource(audio);
       const dest = audioContext.createMediaStreamDestination();
       const analyser = audioContext.createAnalyser();
       const gainNode = audioContext.createGain();
-      gainNode.gain.value = 0; // Silenciar salida
+      gainNode.gain.value = 0;
       analyser.fftSize = 256;
       analyserRef.current = analyser;
+
       source.connect(analyser);
       analyser.connect(dest);
       source.connect(gainNode);
@@ -69,6 +52,7 @@ const LiveRecorder = ({ onBack, onTranscriptionReady, isTranscribing }: LiveReco
       mediaRecorderRef.current = recorder;
       recorder.start(1000);
       setIsRecording(true);
+      setSignalStatus("active");
 
       timerRef.current = window.setInterval(() => {
         setElapsed((prev) => {
@@ -82,10 +66,57 @@ const LiveRecorder = ({ onBack, onTranscriptionReady, isTranscribing }: LiveReco
 
       drawSpectrum();
     } catch (err) {
-      console.error("Error starting recording:", err);
-      toast({ title: "Error", description: "No se pudo iniciar la grabación", variant: "destructive" });
+      console.error("Error setting up audio capture:", err);
+      toast({ title: "Error", description: "No se pudo configurar la captura de audio", variant: "destructive" });
     }
   }, []);
+
+  const startRecording = useCallback(async () => {
+    try {
+      const audio = audioRef.current;
+      if (!audio) return;
+
+      setSignalStatus("connecting");
+
+      const onPlaying = () => {
+        audio.removeEventListener("playing", onPlaying);
+        setupAudioCapture(audio);
+      };
+      audio.addEventListener("playing", onPlaying);
+
+      if (Hls.isSupported()) {
+        const hls = new Hls();
+        hls.loadSource(HLS_URL);
+        hls.attachMedia(audio);
+        hlsRef.current = hls;
+
+        hls.on(Hls.Events.ERROR, (_event, data) => {
+          console.error("HLS error:", data);
+          if (data.fatal) {
+            setSignalStatus("silent");
+            toast({ title: "Error de conexión", description: "No se pudo conectar al stream en vivo", variant: "destructive" });
+          }
+        });
+
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          audio.play().catch((e) => {
+            console.error("Play failed:", e);
+            setSignalStatus("silent");
+          });
+        });
+      } else if (audio.canPlayType("application/vnd.apple.mpegurl")) {
+        audio.src = HLS_URL;
+        audio.play().catch((e) => {
+          console.error("Play failed:", e);
+          setSignalStatus("silent");
+        });
+      }
+    } catch (err) {
+      console.error("Error starting recording:", err);
+      setSignalStatus("silent");
+      toast({ title: "Error", description: "No se pudo iniciar la grabación", variant: "destructive" });
+    }
+  }, [setupAudioCapture]);
 
   const drawSpectrum = () => {
     const canvas = canvasRef.current;
