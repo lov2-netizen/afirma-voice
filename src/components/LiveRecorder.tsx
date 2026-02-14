@@ -18,6 +18,7 @@ const LiveRecorder = ({ onBack, onTranscriptionReady, isTranscribing }: LiveReco
   const [elapsed, setElapsed] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
+  const [signalStatus, setSignalStatus] = useState<"connecting" | "active" | "silent">("connecting");
   const audioRef = useRef<HTMLAudioElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -51,11 +52,14 @@ const LiveRecorder = ({ onBack, onTranscriptionReady, isTranscribing }: LiveReco
       const source = audioContext.createMediaElementSource(audio);
       const dest = audioContext.createMediaStreamDestination();
       const analyser = audioContext.createAnalyser();
+      const gainNode = audioContext.createGain();
+      gainNode.gain.value = 0; // Silenciar salida
       analyser.fftSize = 256;
       analyserRef.current = analyser;
       source.connect(analyser);
       analyser.connect(dest);
-      // No conectar a audioContext.destination para silenciar la salida
+      source.connect(gainNode);
+      gainNode.connect(audioContext.destination);
 
       const recorder = new MediaRecorder(dest.stream);
       chunksRef.current = [];
@@ -93,9 +97,17 @@ const LiveRecorder = ({ onBack, onTranscriptionReady, isTranscribing }: LiveReco
     const bufferLength = analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
 
+    let frameCount = 0;
     const draw = () => {
       animFrameRef.current = requestAnimationFrame(draw);
       analyser.getByteFrequencyData(dataArray);
+
+      // Check signal every 30 frames (~0.5s)
+      frameCount++;
+      if (frameCount % 30 === 0) {
+        const sum = dataArray.reduce((a, b) => a + b, 0);
+        setSignalStatus(sum > 100 ? "active" : "silent");
+      }
 
       ctx.fillStyle = "hsl(270, 10%, 95%)";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -107,9 +119,8 @@ const LiveRecorder = ({ onBack, onTranscriptionReady, isTranscribing }: LiveReco
       for (let i = 0; i < barCount; i++) {
         const value = dataArray[i * step];
         const percent = value / 255;
-        const barHeight = percent * canvas.height;
+        const barHeight = Math.max(percent * canvas.height, 1);
 
-        // Gradient from primary to secondary
         const hue = 289 + (i / barCount) * 30;
         const saturation = 38 + percent * 20;
         ctx.fillStyle = `hsl(${hue}, ${saturation}%, ${38 + percent * 15}%)`;
@@ -211,13 +222,24 @@ const LiveRecorder = ({ onBack, onTranscriptionReady, isTranscribing }: LiveReco
       </Button>
 
       <div className="flex flex-col items-center gap-6 pt-8">
-        {/* Live indicator */}
-        <div className="flex items-center gap-2">
-          <span className="relative flex h-3 w-3">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive/60 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive"></span>
+        {/* Live indicator + signal status */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive/60 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-destructive"></span>
+            </span>
+            <span className="text-sm font-medium text-destructive">EN VIVO</span>
+          </div>
+          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+            signalStatus === "active" 
+              ? "bg-green-100 text-green-700" 
+              : signalStatus === "silent" 
+              ? "bg-yellow-100 text-yellow-700" 
+              : "bg-muted text-muted-foreground"
+          }`}>
+            {signalStatus === "active" ? "📶 Señal detectada" : signalStatus === "silent" ? "⚠️ Sin señal" : "⏳ Conectando..."}
           </span>
-          <span className="text-sm font-medium text-destructive">EN VIVO</span>
         </div>
 
         {/* Stop button */}
