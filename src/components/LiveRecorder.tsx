@@ -5,7 +5,8 @@ import Hls from "hls.js";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
-const HLS_URL = "https://usa19.fastcast4u.com:3730/hls/stream_1_aac.m3u8";
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const HLS_URL = `${SUPABASE_URL}/functions/v1/hls-proxy?path=${encodeURIComponent("stream_1_aac.m3u8")}`;
 const MAX_DURATION = 90 * 60; // 90 minutes
 
 interface LiveRecorderProps {
@@ -85,12 +86,7 @@ const LiveRecorder = ({ onBack, onTranscriptionReady, isTranscribing }: LiveReco
       audio.addEventListener("playing", onPlaying);
 
       if (Hls.isSupported()) {
-        const hls = new Hls({
-          enableWorker: true,
-          xhrSetup: (xhr) => {
-            xhr.withCredentials = false;
-          },
-        });
+        const hls = new Hls();
         hls.loadSource(HLS_URL);
         hls.attachMedia(audio);
         hlsRef.current = hls;
