@@ -55,7 +55,7 @@ const LiveRecorder = ({ onBack, onTranscriptionReady, isTranscribing }: LiveReco
       analyserRef.current = analyser;
       source.connect(analyser);
       analyser.connect(dest);
-      source.connect(audioContext.destination);
+      // No conectar a audioContext.destination para silenciar la salida
 
       const recorder = new MediaRecorder(dest.stream);
       chunksRef.current = [];
@@ -76,14 +76,14 @@ const LiveRecorder = ({ onBack, onTranscriptionReady, isTranscribing }: LiveReco
         });
       }, 1000);
 
-      drawWaveform();
+      drawSpectrum();
     } catch (err) {
       console.error("Error starting recording:", err);
       toast({ title: "Error", description: "No se pudo iniciar la grabación", variant: "destructive" });
     }
   }, []);
 
-  const drawWaveform = () => {
+  const drawSpectrum = () => {
     const canvas = canvasRef.current;
     const analyser = analyserRef.current;
     if (!canvas || !analyser) return;
@@ -95,25 +95,31 @@ const LiveRecorder = ({ onBack, onTranscriptionReady, isTranscribing }: LiveReco
 
     const draw = () => {
       animFrameRef.current = requestAnimationFrame(draw);
-      analyser.getByteTimeDomainData(dataArray);
+      analyser.getByteFrequencyData(dataArray);
 
       ctx.fillStyle = "hsl(270, 10%, 95%)";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = "hsl(289, 38%, 38%)";
-      ctx.beginPath();
 
-      const sliceWidth = canvas.width / bufferLength;
-      let x = 0;
-      for (let i = 0; i < bufferLength; i++) {
-        const v = dataArray[i] / 128.0;
-        const y = (v * canvas.height) / 2;
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-        x += sliceWidth;
+      const barCount = 64;
+      const barWidth = canvas.width / barCount;
+      const step = Math.floor(bufferLength / barCount);
+
+      for (let i = 0; i < barCount; i++) {
+        const value = dataArray[i * step];
+        const percent = value / 255;
+        const barHeight = percent * canvas.height;
+
+        // Gradient from primary to secondary
+        const hue = 289 + (i / barCount) * 30;
+        const saturation = 38 + percent * 20;
+        ctx.fillStyle = `hsl(${hue}, ${saturation}%, ${38 + percent * 15}%)`;
+        ctx.fillRect(
+          i * barWidth,
+          canvas.height - barHeight,
+          barWidth - 1,
+          barHeight
+        );
       }
-      ctx.lineTo(canvas.width, canvas.height / 2);
-      ctx.stroke();
     };
     draw();
   };
@@ -231,9 +237,9 @@ const LiveRecorder = ({ onBack, onTranscriptionReady, isTranscribing }: LiveReco
         <div className="flex w-full items-end justify-between gap-4">
           <canvas
             ref={canvasRef}
-            width={200}
-            height={40}
-            className="rounded"
+            width={300}
+            height={60}
+            className="rounded flex-1"
           />
           <div className="flex items-center gap-1 text-sm">
             <span className="rounded bg-muted px-2 py-1 font-mono">{formatTime(elapsed)}</span>
