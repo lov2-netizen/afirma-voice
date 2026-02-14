@@ -85,7 +85,12 @@ const LiveRecorder = ({ onBack, onTranscriptionReady, isTranscribing }: LiveReco
       audio.addEventListener("playing", onPlaying);
 
       if (Hls.isSupported()) {
-        const hls = new Hls();
+        const hls = new Hls({
+          enableWorker: true,
+          xhrSetup: (xhr) => {
+            xhr.withCredentials = false;
+          },
+        });
         hls.loadSource(HLS_URL);
         hls.attachMedia(audio);
         hlsRef.current = hls;
