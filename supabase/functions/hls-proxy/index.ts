@@ -1,3 +1,4 @@
+// HLS Proxy v2
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
@@ -37,20 +38,15 @@ serve(async (req) => {
     const contentType = response.headers.get("content-type") || "application/octet-stream";
     const body = await response.arrayBuffer();
 
-    // For m3u8 manifests, rewrite segment URLs to go through proxy
+    // For m3u8 manifests, rewrite ALL non-comment lines to go through proxy
     if (path.endsWith(".m3u8")) {
       const text = new TextDecoder().decode(body);
       const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
       const rewritten = text.replace(
-        /^(?!#)(.+\.ts.*)$/gm,
+        /^(?!#)(\S+)$/gm,
         (match) => `${supabaseUrl}/functions/v1/hls-proxy?path=${encodeURIComponent(match.trim())}`
       );
-      // Also rewrite .aac segment references
-      const rewritten2 = rewritten.replace(
-        /^(?!#)(.+\.aac.*)$/gm,
-        (match) => `${supabaseUrl}/functions/v1/hls-proxy?path=${encodeURIComponent(match.trim())}`
-      );
-      return new Response(rewritten2, {
+      return new Response(rewritten, {
         headers: {
           ...corsHeaders,
           "Content-Type": "application/vnd.apple.mpegurl",
