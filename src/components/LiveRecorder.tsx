@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { ArrowLeft, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Hls from "hls.js";
-import { supabase } from "@/integrations/supabase/client";
+
 import { toast } from "@/hooks/use-toast";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
@@ -203,11 +203,21 @@ const LiveRecorder = ({ onBack, onTranscriptionReady, isTranscribing }: LiveReco
       const formData = new FormData();
       formData.append("file", blob, "recording.webm");
 
-      const { data, error } = await supabase.functions.invoke("transcribe-audio", {
+      const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/transcribe-audio`, {
+        method: "POST",
+        headers: {
+          "apikey": SUPABASE_KEY,
+          "Authorization": `Bearer ${SUPABASE_KEY}`,
+        },
         body: formData,
       });
 
-      if (error) throw error;
+      if (!res.ok) {
+        const errBody = await res.text();
+        throw new Error(errBody);
+      }
+      const data = await res.json();
       if (data?.transcription) {
         onTranscriptionReady(data.transcription);
       }

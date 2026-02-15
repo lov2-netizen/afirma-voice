@@ -32,11 +32,22 @@ const Index = () => {
       const formData = new FormData();
       formData.append("file", file, file.name);
 
-      const { data, error } = await supabase.functions.invoke("transcribe-audio", {
+      const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+      const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/transcribe-audio`, {
+        method: "POST",
+        headers: {
+          "apikey": SUPABASE_KEY,
+          "Authorization": `Bearer ${SUPABASE_KEY}`,
+        },
         body: formData,
       });
 
-      if (error) throw error;
+      if (!res.ok) {
+        const errBody = await res.text();
+        throw new Error(errBody);
+      }
+      const data = await res.json();
       setTranscription(data.transcription);
       setAudioFile(null); // release file reference
     } catch (err) {
