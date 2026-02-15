@@ -24,27 +24,52 @@ serve(async (req) => {
       });
     }
 
-    // Ensure file has a valid extension for Whisper API
-    const originalName = file.name || "audio";
-    const hasExtension = /\.(webm|mp3|wav|m4a|ogg|flac|mp4|mpeg|mpga|oga)$/i.test(originalName);
-    const fileName = hasExtension ? originalName : `${originalName}.webm`;
-
-    // Create a new File with the correct name to ensure Whisper recognizes the format
+    // Read file data
     const arrayBuffer = await file.arrayBuffer();
-    const newFile = new File([arrayBuffer], fileName, { type: file.type || "audio/webm" });
+    const uint8 = new Uint8Array(arrayBuffer);
+    
+    // Determine filename with valid extension
+    const originalName = file.name || "audio";
+    const hasExt = /\.(webm|mp3|wav|m4a|ogg|flac|mp4|mpeg|mpga|oga)$/i.test(originalName);
+    const fileName = hasExt ? originalName : "recording.webm";
 
-    // Forward to OpenAI Whisper
-    const whisperForm = new FormData();
-    whisperForm.append("file", newFile, fileName);
-    whisperForm.append("model", "whisper-1");
-    whisperForm.append("language", "es");
+    // Build multipart form manually to ensure proper filename
+    const boundary = "----FormBoundary" + crypto.randomUUID().replace(/-/g, "");
+    const encoder = new TextEncoder();
+    
+    const parts: Uint8Array[] = [];
+    
+    // File part
+    const fileHeader = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fileName}"\r\nContent-Type: ${file.type || "audio/webm"}\r\n\r\n`;
+    parts.push(encoder.encode(fileHeader));
+    parts.push(uint8);
+    parts.push(encoder.encode("\r\n"));
+    
+    // Model part
+    parts.push(encoder.encode(`--${boundary}\r\nContent-Disposition: form-data; name="model"\r\n\r\nwhisper-1\r\n`));
+    
+    // Language part
+    parts.push(encoder.encode(`--${boundary}\r\nContent-Disposition: form-data; name="language"\r\n\r\nes\r\n`));
+    
+    // End boundary
+    parts.push(encoder.encode(`--${boundary}--\r\n`));
+    
+    // Combine all parts
+    const totalLen = parts.reduce((sum, p) => sum + p.length, 0);
+    const body = new Uint8Array(totalLen);
+    let offset = 0;
+    for (const part of parts) {
+      body.set(part, offset);
+      offset += part.length;
+    }
 
     const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": `multipart/form-data; boundary=${boundary}`,
       },
-      body: whisperForm,
+      body: body,
     });
 
     if (!response.ok) {
