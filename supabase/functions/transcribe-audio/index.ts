@@ -27,17 +27,16 @@ serve(async (req) => {
     // Read file data
     const arrayBuffer = await file.arrayBuffer();
     const uint8 = new Uint8Array(arrayBuffer);
-    
-    // Debug: log file info
-    console.log("File received:", {
-      name: file.name,
-      type: file.type,
-      size: uint8.length,
-      first10bytes: Array.from(uint8.slice(0, 10)),
-    });
-    
+
+    const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
     if (uint8.length === 0) {
       return new Response(JSON.stringify({ error: "Empty audio file" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (uint8.length > MAX_FILE_SIZE) {
+      return new Response(JSON.stringify({ error: "File too large. Maximum 25MB." }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -105,7 +104,7 @@ serve(async (req) => {
   } catch (e) {
     console.error("transcribe-audio error:", e);
     return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
+      JSON.stringify({ error: "Failed to process audio. Please try again." }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

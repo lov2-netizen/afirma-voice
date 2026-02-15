@@ -25,6 +25,14 @@ serve(async (req) => {
       });
     }
 
+    // Validate path to prevent abuse - only allow valid HLS segment patterns
+    if (!/^[a-zA-Z0-9_\-\/\.]+\.(m3u8|ts|aac|mp4)$/.test(path)) {
+      return new Response(JSON.stringify({ error: "Invalid path format" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const targetUrl = `${HLS_BASE}/${path}`;
     const response = await fetch(targetUrl);
 
@@ -71,7 +79,7 @@ serve(async (req) => {
     });
   } catch (e) {
     console.error("hls-proxy error:", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
+    return new Response(JSON.stringify({ error: "Proxy error. Please try again." }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

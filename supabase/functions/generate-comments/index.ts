@@ -69,24 +69,37 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    const { transcription, programa, conductores, ciudades, count } = await req.json();
+    const body = await req.json();
+    const { transcription, programa, conductores, ciudades } = body;
+    const count = Math.min(25, Math.max(5, Number(body.count) || 10));
 
-    if (!transcription) {
+    if (!transcription || typeof transcription !== "string") {
       return new Response(JSON.stringify({ error: "No transcription provided" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    if (transcription.length > 50000) {
+      return new Response(JSON.stringify({ error: "Transcription too long. Maximum 50,000 characters." }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
-    const ciudadesText = ciudades === "__MEXICO__"
+    // Sanitize string inputs
+    const safePrograma = typeof programa === "string" ? programa.slice(0, 200) : "";
+    const safeConductores = typeof conductores === "string" ? conductores.slice(0, 200) : "";
+    const safeCiudades = typeof ciudades === "string" ? ciudades.slice(0, 500) : "";
+
+    const ciudadesText = safeCiudades === "__MEXICO__"
       ? "Genera ciudades reales de México de forma aleatoria para cada comentario (variadas, no solo las más grandes)"
-      : `Ciudades disponibles: ${ciudades || "cualquier ciudad hispanohablante"}`;
+      : `Ciudades disponibles: ${safeCiudades || "cualquier ciudad hispanohablante"}`;
 
     const userPrompt = `════════════════════════════════════
 DATOS DEL PROGRAMA A USAR
 ════════════════════════════════════
-Programa: ${programa || "No especificado"}
-Conductores: ${conductores || "No especificado"}
+Programa: ${safePrograma || "No especificado"}
+Conductores: ${safeConductores || "No especificado"}
 ${ciudadesText}
 Cantidad de comentarios a generar: ${count || 10}
 Transcripción del audio: ${transcription}
@@ -173,7 +186,7 @@ Genera exactamente ${count || 10} comentarios. Cada uno debe incluir:
   } catch (e) {
     console.error("generate-comments error:", e);
     return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
+      JSON.stringify({ error: "Failed to generate comments. Please try again." }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
