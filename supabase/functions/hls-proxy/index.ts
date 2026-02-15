@@ -42,9 +42,16 @@ serve(async (req) => {
     if (path.endsWith(".m3u8")) {
       const text = new TextDecoder().decode(body);
       const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+      // Resolve relative segment paths against the playlist's directory
+      const dirPrefix = path.includes("/") ? path.substring(0, path.lastIndexOf("/") + 1) : "";
       const rewritten = text.replace(
         /^(?!#)(\S+)$/gm,
-        (match) => `${supabaseUrl}/functions/v1/hls-proxy?path=${encodeURIComponent(match.trim())}`
+        (match) => {
+          const trimmed = match.trim();
+          // If already absolute URL, just proxy it; otherwise prepend directory
+          const segmentPath = trimmed.startsWith("http") ? trimmed : `${dirPrefix}${trimmed}`;
+          return `${supabaseUrl}/functions/v1/hls-proxy?path=${encodeURIComponent(segmentPath)}`;
+        }
       );
       return new Response(rewritten, {
         headers: {
