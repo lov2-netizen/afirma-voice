@@ -24,14 +24,18 @@ serve(async (req) => {
       });
     }
 
-    // Determine proper filename with extension for Whisper
-    const originalName = file.name || "audio.webm";
+    // Ensure file has a valid extension for Whisper API
+    const originalName = file.name || "audio";
     const hasExtension = /\.(webm|mp3|wav|m4a|ogg|flac|mp4|mpeg|mpga|oga)$/i.test(originalName);
     const fileName = hasExtension ? originalName : `${originalName}.webm`;
 
+    // Create a new File with the correct name to ensure Whisper recognizes the format
+    const arrayBuffer = await file.arrayBuffer();
+    const newFile = new File([arrayBuffer], fileName, { type: file.type || "audio/webm" });
+
     // Forward to OpenAI Whisper
     const whisperForm = new FormData();
-    whisperForm.append("file", file, fileName);
+    whisperForm.append("file", newFile, fileName);
     whisperForm.append("model", "whisper-1");
     whisperForm.append("language", "es");
 
