@@ -195,11 +195,17 @@ const LiveRecorder = ({ onBack, onTranscriptionReady, isTranscribing }: LiveReco
     // Wait a moment for final chunks
     await new Promise((r) => setTimeout(r, 500));
 
-    const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+    const chunks = chunksRef.current;
     chunksRef.current = [];
+    
+    console.log("Recording stopped. Chunks:", chunks.length, "Chunk sizes:", chunks.map(c => c.size));
+    
+    const blob = new Blob(chunks, { type: "audio/webm" });
+    console.log("Final blob size:", blob.size);
 
-    if (blob.size === 0) {
-      toast({ title: "Sin audio", description: "No se capturó audio. Verifica que el stream esté activo.", variant: "destructive" });
+    // A valid webm with audio should be > 1KB; smaller means no real audio captured
+    if (blob.size < 1000) {
+      toast({ title: "Sin audio", description: "No se capturó audio real. El stream puede no estar activo o hay un problema de CORS.", variant: "destructive" });
       setIsStopping(false);
       return;
     }
