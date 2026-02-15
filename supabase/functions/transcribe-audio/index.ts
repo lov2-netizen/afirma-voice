@@ -28,6 +28,21 @@ serve(async (req) => {
     const arrayBuffer = await file.arrayBuffer();
     const uint8 = new Uint8Array(arrayBuffer);
     
+    // Debug: log file info
+    console.log("File received:", {
+      name: file.name,
+      type: file.type,
+      size: uint8.length,
+      first10bytes: Array.from(uint8.slice(0, 10)),
+    });
+    
+    if (uint8.length === 0) {
+      return new Response(JSON.stringify({ error: "Empty audio file" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // Determine filename with valid extension
     const originalName = file.name || "audio";
     const hasExt = /\.(webm|mp3|wav|m4a|ogg|flac|mp4|mpeg|mpga|oga)$/i.test(originalName);
