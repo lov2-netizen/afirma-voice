@@ -198,6 +198,12 @@ const LiveRecorder = ({ onBack, onTranscriptionReady, isTranscribing }: LiveReco
     const blob = new Blob(chunksRef.current, { type: "audio/webm" });
     chunksRef.current = [];
 
+    if (blob.size === 0) {
+      toast({ title: "Sin audio", description: "No se capturó audio. Verifica que el stream esté activo.", variant: "destructive" });
+      setIsStopping(false);
+      return;
+    }
+
     // Transcribe
     try {
       const formData = new FormData();
