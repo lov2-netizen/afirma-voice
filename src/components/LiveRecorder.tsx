@@ -165,7 +165,20 @@ const LiveRecorder = ({ onBack, onTranscriptionReady, isTranscribing }: LiveReco
         for (let i = 0; i < timeData.length; i++) {
           deviation += Math.abs(timeData[i] - 128);
         }
-        setSignalStatus(deviation > 200 ? "active" : "silent");
+        if (deviation > 200) {
+          setSignalStatus("active");
+        } else {
+          // Safari CORS restriction: analyser may return silence even when audio is captured
+          // Fall back to checking if MediaRecorder is receiving data
+          const recorder = mediaRecorderRef.current;
+          const hasChunks = chunksRef.current.length > 0;
+          const lastChunkSize = hasChunks ? chunksRef.current[chunksRef.current.length - 1].size : 0;
+          if (recorder && recorder.state === "recording" && lastChunkSize > 0) {
+            setSignalStatus("active");
+          } else {
+            setSignalStatus("silent");
+          }
+        }
       }
 
       // Clear canvas
