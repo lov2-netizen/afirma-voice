@@ -37,7 +37,8 @@ const LiveRecorder = ({ onBack, onTranscriptionReady, isTranscribing }: LiveReco
       const analyser = audioContext.createAnalyser();
       const gainNode = audioContext.createGain();
       gainNode.gain.value = 0;
-      analyser.fftSize = 256;
+      analyser.fftSize = 2048;
+      analyser.smoothingTimeConstant = 0.3;
       analyserRef.current = analyser;
 
       source.connect(analyser);
@@ -126,36 +127,59 @@ const LiveRecorder = ({ onBack, onTranscriptionReady, isTranscribing }: LiveReco
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const bufferLength = analyser.frequencyBinCount;
-    const dataArray = new Uint8Array(bufferLength);
+    const bufferLength = analyser.fftSize;
+    const timeData = new Uint8Array(bufferLength);
+    const freqData = new Uint8Array(analyser.frequencyBinCount);
 
     let frameCount = 0;
     const draw = () => {
       animFrameRef.current = requestAnimationFrame(draw);
-      analyser.getByteFrequencyData(dataArray);
+      analyser.getByteTimeDomainData(timeData);
+      analyser.getByteFrequencyData(freqData);
 
       // Check signal every 30 frames (~0.5s)
       frameCount++;
       if (frameCount % 30 === 0) {
-        const sum = dataArray.reduce((a, b) => a + b, 0);
-        setSignalStatus(sum > 100 ? "active" : "silent");
+        // Check time-domain deviation from silence (128 = silence)
+        let deviation = 0;
+        for (let i = 0; i < timeData.length; i++) {
+          deviation += Math.abs(timeData[i] - 128);
+        }
+        setSignalStatus(deviation > 200 ? "active" : "silent");
       }
 
+      // Clear canvas
       ctx.fillStyle = "hsl(270, 10%, 95%)";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      const barCount = 64;
-      const barWidth = canvas.width / barCount;
-      const step = Math.floor(bufferLength / barCount);
+      // Draw waveform
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "hsl(289, 38%, 48%)";
+      ctx.beginPath();
+      const sliceWidth = canvas.width / bufferLength;
+      let x = 0;
+      for (let i = 0; i < bufferLength; i++) {
+        const v = timeData[i] / 128.0;
+        const y = (v * canvas.height) / 2;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+        x += sliceWidth;
+      }
+      ctx.lineTo(canvas.width, canvas.height / 2);
+      ctx.stroke();
 
+      // Draw frequency bars overlay (subtle)
+      const barCount = 32;
+      const barWidth = canvas.width / barCount;
+      const step = Math.floor(analyser.frequencyBinCount / barCount);
       for (let i = 0; i < barCount; i++) {
-        const value = dataArray[i * step];
+        const value = freqData[i * step];
         const percent = value / 255;
-        const barHeight = Math.max(percent * canvas.height, 1);
+        const barHeight = percent * canvas.height * 0.6;
+        if (barHeight < 1) continue;
 
         const hue = 289 + (i / barCount) * 30;
-        const saturation = 38 + percent * 20;
-        ctx.fillStyle = `hsl(${hue}, ${saturation}%, ${38 + percent * 15}%)`;
+        ctx.fillStyle = `hsla(${hue}, 45%, 50%, 0.3)`;
         ctx.fillRect(
           i * barWidth,
           canvas.height - barHeight,
