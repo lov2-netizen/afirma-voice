@@ -29,22 +29,42 @@ const LiveRecorder = ({ onBack, onTranscriptionReady, isTranscribing }: LiveReco
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animFrameRef = useRef<number | null>(null);
 
-  const setupAudioCapture = useCallback((audio: HTMLAudioElement) => {
+  const audioContextRef = useRef<AudioContext | null>(null);
+
+  const setupAudioCapture = useCallback(async (audio: HTMLAudioElement) => {
     try {
-      const audioContext = new AudioContext();
-      const source = audioContext.createMediaElementSource(audio);
-      const dest = audioContext.createMediaStreamDestination();
+      // Mute audible output — we only need the visual spectrum
+      audio.volume = 0;
+
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      audioContextRef.current = audioContext;
+
+      // Safari requires explicit resume after user gesture
+      if (audioContext.state === "suspended") {
+        await audioContext.resume();
+      }
+
       const analyser = audioContext.createAnalyser();
-      const gainNode = audioContext.createGain();
-      gainNode.gain.value = 0;
       analyser.fftSize = 2048;
       analyser.smoothingTimeConstant = 0.3;
       analyserRef.current = analyser;
 
+      const dest = audioContext.createMediaStreamDestination();
+
+      // Try captureStream for better Safari compatibility, fall back to createMediaElementSource
+      let source: AudioNode;
+      const stream = (audio as any).captureStream?.() || (audio as any).mozCaptureStream?.();
+      if (stream && stream.getAudioTracks().length > 0) {
+        console.log("Using captureStream for audio analysis");
+        source = audioContext.createMediaStreamSource(stream);
+      } else {
+        console.log("Using createMediaElementSource for audio analysis");
+        source = audioContext.createMediaElementSource(audio);
+      }
+
+      // Route: source → analyser → MediaRecorder destination (no speaker output)
       source.connect(analyser);
       analyser.connect(dest);
-      source.connect(gainNode);
-      gainNode.connect(audioContext.destination);
 
       const recorder = new MediaRecorder(dest.stream);
       chunksRef.current = [];
