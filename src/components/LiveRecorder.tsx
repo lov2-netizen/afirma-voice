@@ -168,25 +168,6 @@ const LiveRecorder = ({ onBack, onTranscriptionReady, isTranscribing }: LiveReco
       ctx.lineTo(canvas.width, canvas.height / 2);
       ctx.stroke();
 
-      // Draw frequency bars overlay (subtle)
-      const barCount = 32;
-      const barWidth = canvas.width / barCount;
-      const step = Math.floor(analyser.frequencyBinCount / barCount);
-      for (let i = 0; i < barCount; i++) {
-        const value = freqData[i * step];
-        const percent = value / 255;
-        const barHeight = percent * canvas.height * 0.6;
-        if (barHeight < 1) continue;
-
-        const hue = 289 + (i / barCount) * 30;
-        ctx.fillStyle = `hsla(${hue}, 45%, 50%, 0.3)`;
-        ctx.fillRect(
-          i * barWidth,
-          canvas.height - barHeight,
-          barWidth - 1,
-          barHeight
-        );
-      }
     };
     draw();
   };
