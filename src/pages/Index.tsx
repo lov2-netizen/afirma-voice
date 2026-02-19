@@ -10,6 +10,7 @@ import logo from "@/assets/logo.jpg";
 
 const defaultConfig: CommentConfigState = {
   modo: "normal",
+  promptLibre: "",
   programa: "",
   conductores: "",
   numConductores: "auto",
@@ -83,6 +84,8 @@ const Index = () => {
       const { data, error } = await supabase.functions.invoke("generate-comments", {
         body: {
           transcription,
+          modo: config.modo,
+          promptLibre: config.promptLibre,
           programa: config.programa,
           conductores: config.conductores,
           numConductores: config.numConductores,
@@ -93,7 +96,6 @@ const Index = () => {
           longitud: config.longitud,
           generaciones: config.generaciones,
           tonos: config.tonos,
-          modo: config.modo,
         },
       });
       if (error) throw error;

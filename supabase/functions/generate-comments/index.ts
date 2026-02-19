@@ -117,6 +117,7 @@ serve(async (req) => {
       generaciones,
       tonos,
       modo,
+      promptLibre,
     } = body;
     const count = Math.min(25, Math.max(5, Number(body.count) || 10));
 
@@ -133,62 +134,68 @@ serve(async (req) => {
       });
     }
 
-    // Sanitize string inputs
-    const safePrograma = typeof programa === "string" ? programa.slice(0, 200) : "";
-    const safeConductores = typeof conductores === "string" ? conductores.slice(0, 200) : "";
-    const safeCiudades = typeof ciudades === "string" ? ciudades.slice(0, 500) : "";
-    const safeTema = typeof tema === "string" ? tema.slice(0, 300) : "";
-    const safeNumConductores = typeof numConductores === "string" ? numConductores : "auto";
-    const safeGeneroConductores = typeof generoConductores === "string" ? generoConductores : "auto";
-    const safeLongitud = typeof longitud === "string" ? longitud : "variado";
-    const safeGeneraciones = Array.isArray(generaciones) ? generaciones.slice(0, 3) : [];
-    const safeTonos = Array.isArray(tonos) ? tonos.slice(0, 4) : [];
     const safeModo = typeof modo === "string" ? modo : "normal";
 
-    const ciudadesText = safeCiudades === "__MEXICO__"
-      ? "Genera ciudades reales de México de forma aleatoria para cada comentario (variadas, no solo las más grandes)"
-      : `Ciudades disponibles: ${safeCiudades || "cualquier ciudad hispanohablante"}`;
+    let userPrompt: string;
 
-    // Build conductor context
-    let conductorContext = "";
-    if (safeNumConductores === "uno") conductorContext += "El programa tiene UN solo conductor.";
-    else if (safeNumConductores === "varios") conductorContext += "El programa tiene VARIOS conductores.";
-    else conductorContext += "Detecta automáticamente cuántos conductores hay según la transcripción.";
+    if (safeModo === "prompt_libre") {
+      // Free prompt mode: use the user's prompt directly
+      const safePromptLibre = typeof promptLibre === "string" ? promptLibre.slice(0, 5000) : "";
+      userPrompt = `${safePromptLibre}
 
-    if (safeGeneroConductores === "masculino") conductorContext += " El/los conductor(es) son MASCULINOS.";
-    else if (safeGeneroConductores === "femenino") conductorContext += " El/los conductor(es) son FEMENINOS.";
-    else conductorContext += " Detecta automáticamente el género según la transcripción.";
+Transcripción del audio: ${transcription}
 
-    // Build longitud instruction
-    let longitudInstruction = "";
-    if (safeLongitud === "cortos") {
-      longitudInstruction = "LONGITUD REQUERIDA: Comentarios CORTOS (15-35 palabras). Breves y directos, ideales para menciones rápidas.";
-    } else if (safeLongitud === "largos") {
-      longitudInstruction = "LONGITUD REQUERIDA: Comentarios LARGOS con ejemplos (80-120 palabras). Extensos con historias personales. Incluye experiencias y ejemplos relacionados al tema.";
+Genera exactamente ${count} comentarios. Cada uno debe incluir:
+- Nombre completo ficticio pero verosímil (nombre y apellido latinoamericanos)
+- Ciudad
+- El comentario en sí`;
     } else {
-      longitudInstruction = "LONGITUD: Variada y libre. El modelo decide la longitud de forma natural.";
-    }
+      // Normal mode: build structured prompt from config
+      const safePrograma = typeof programa === "string" ? programa.slice(0, 200) : "";
+      const safeConductores = typeof conductores === "string" ? conductores.slice(0, 200) : "";
+      const safeCiudades = typeof ciudades === "string" ? ciudades.slice(0, 500) : "";
+      const safeTema = typeof tema === "string" ? tema.slice(0, 300) : "";
+      const safeNumConductores = typeof numConductores === "string" ? numConductores : "auto";
+      const safeGeneroConductores = typeof generoConductores === "string" ? generoConductores : "auto";
+      const safeLongitud = typeof longitud === "string" ? longitud : "variado";
+      const safeGeneraciones = Array.isArray(generaciones) ? generaciones.slice(0, 3) : [];
+      const safeTonos = Array.isArray(tonos) ? tonos.slice(0, 4) : [];
 
-    // Build generaciones instruction
-    let generacionesInstruction = "";
-    if (safeGeneraciones.length > 0) {
-      const labels = safeGeneraciones.map((g: string) => GENERACION_LABELS[g] || g).filter(Boolean);
-      generacionesInstruction = `GRUPOS DEMOGRÁFICOS: Distribuye los comentarios entre estos perfiles: ${labels.join(" | ")}. Adapta el lenguaje, slang, tecnología y referencias a cada generación.`;
-    }
+      const ciudadesText = safeCiudades === "__MEXICO__"
+        ? "Genera ciudades reales de México de forma aleatoria para cada comentario (variadas, no solo las más grandes)"
+        : `Ciudades disponibles: ${safeCiudades || "cualquier ciudad hispanohablante"}`;
 
-    // Build tonos instruction
-    let tonosInstruction = "";
-    if (safeTonos.length > 0) {
-      const labels = safeTonos.map((t: string) => TONO_LABELS[t] || t).filter(Boolean);
-      tonosInstruction = `TONO Y ESTILO: Mezcla estos estilos en los comentarios: ${labels.join(" | ")}. Distribuye los tonos de forma natural y variada.`;
-    }
+      let conductorContext = "";
+      if (safeNumConductores === "uno") conductorContext += "El programa tiene UN solo conductor.";
+      else if (safeNumConductores === "varios") conductorContext += "El programa tiene VARIOS conductores.";
+      else conductorContext += "Detecta automáticamente cuántos conductores hay según la transcripción.";
 
-    // Prompt libre mode adds a note
-    const modoNote = safeModo === "prompt_libre"
-      ? "MODO PROMPT LIBRE: Tienes libertad creativa total para generar comentarios únicos y originales, sin seguir plantillas. Sorprende con variedad extrema."
-      : "";
+      if (safeGeneroConductores === "masculino") conductorContext += " El/los conductor(es) son MASCULINOS.";
+      else if (safeGeneroConductores === "femenino") conductorContext += " El/los conductor(es) son FEMENINOS.";
+      else conductorContext += " Detecta automáticamente el género según la transcripción.";
 
-    const userPrompt = `════════════════════════════════════
+      let longitudInstruction = "";
+      if (safeLongitud === "cortos") {
+        longitudInstruction = "LONGITUD REQUERIDA: Comentarios CORTOS (15-35 palabras). Breves y directos, ideales para menciones rápidas.";
+      } else if (safeLongitud === "largos") {
+        longitudInstruction = "LONGITUD REQUERIDA: Comentarios LARGOS con ejemplos (80-120 palabras). Extensos con historias personales. Incluye experiencias y ejemplos relacionados al tema.";
+      } else {
+        longitudInstruction = "LONGITUD: Variada y libre. El modelo decide la longitud de forma natural.";
+      }
+
+      let generacionesInstruction = "";
+      if (safeGeneraciones.length > 0) {
+        const labels = safeGeneraciones.map((g: string) => GENERACION_LABELS[g] || g).filter(Boolean);
+        generacionesInstruction = `GRUPOS DEMOGRÁFICOS: Distribuye los comentarios entre estos perfiles: ${labels.join(" | ")}. Adapta el lenguaje, slang, tecnología y referencias a cada generación.`;
+      }
+
+      let tonosInstruction = "";
+      if (safeTonos.length > 0) {
+        const labels = safeTonos.map((t: string) => TONO_LABELS[t] || t).filter(Boolean);
+        tonosInstruction = `TONO Y ESTILO: Mezcla estos estilos en los comentarios: ${labels.join(" | ")}. Distribuye los tonos de forma natural y variada.`;
+      }
+
+      userPrompt = `════════════════════════════════════
 DATOS DEL PROGRAMA A USAR
 ════════════════════════════════════
 Programa: ${safePrograma || "No especificado"}
@@ -204,7 +211,6 @@ INSTRUCCIONES DE GENERACIÓN
 ${longitudInstruction}
 ${generacionesInstruction}
 ${tonosInstruction}
-${modoNote}
 
 Transcripción del audio: ${transcription}
 
@@ -212,6 +218,7 @@ Genera exactamente ${count} comentarios. Cada uno debe incluir:
 - Nombre completo ficticio pero verosímil (nombre y apellido latinoamericanos)
 - Ciudad (tomada de la lista o generada aleatoriamente de México si aplica)
 - El comentario en sí`;
+    }
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
