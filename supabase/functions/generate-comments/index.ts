@@ -60,6 +60,41 @@ EJEMPLOS DEL TONO DESEADO
 ✓ "Qué bueno que tocaron este tema. Yo llevo años en esto y todavía aprendo cosas nuevas 😅"
 ✓ "La parte donde hablaron de [tema específico] me pareció lo mejor. Ojalá profundicen más en eso"`;
 
+// Helper maps for human-readable labels
+const GENERACION_LABELS: Record<string, string> = {
+  boomers: "Baby Boomers (1946-1964, 60-78 años): formales, respetuosos, bajo nivel tecnológico",
+  genx: "Generación X (1965-1980, 44-59 años): equilibrados entre formal e informal, moderado nivel tecnológico",
+  millennials: "Millennials (1981-1998, 28-43 años): casual pero correcto, alto nivel tecnológico, usan referencias pop",
+  genz: "Generación Z (1997-2012, 12-27 años): muy casual, slang, nativos digitales, muchos emojis",
+  alfa: "Generación Alfa (2013+, 0-11 años): simple y entusiasta, nativos digitales extremos",
+};
+
+const TONO_LABELS: Record<string, string> = {
+  serio: "Serio/Formal: vocabulario culto, oraciones completas, sin slang",
+  comico: "Cómico/Ligero: humor, chistes relacionados al tema, tono festivo",
+  sarcastico: "Sarcástico: ironía sutil, doble sentido, comentarios con segunda intención",
+  hater: "Hater: crítico pero sin insultar, encuentra fallas o puntos débiles en lo dicho",
+  humor_negro: "Humor Negro: humor oscuro pero inteligente, no ofensivo",
+  optimista: "Optimista: súper positivo, entusiasta, ve el lado bueno de todo",
+  pesimista: "Pesimista: escéptico, ve el lado negativo, duda de todo",
+  dramatico: "Dramático: exagera las emociones, muy emotivo y teatral",
+  academico: "Académico: análisis profundo, cita datos o conceptos, usa terminología técnica",
+  infantil: "Infantil: simple, inocente, comentarios de niño o adolescente muy joven",
+  cinico: "Cínico: desconfiado, escéptico, cree que todo tiene trampa",
+  motivacional: "Motivacional/Coach: inspirador, da consejos, usa frases de superación personal",
+  villano: "Villano: tono maquiavélico, manipulador sutil, frío y calculador",
+  nerd: "Nerd: referencias geek, técnicas o de cultura pop, análisis detallado",
+  bohemio: "Bohemio: artístico, filosófico, referencias culturales o espirituales libres",
+  pasivo_agresivo: "Pasivo-agresivo: aparentemente positivo pero con crítica velada",
+  conspiranoico: "Conspiranoico: teorías conspirativas, desconfía de los medios y el gobierno",
+  chismoso: "Chismoso/Tóxico: especulativo, dramático, le gusta el conflicto y el cotilleo",
+  espiritual: "Espiritual Zen: referencias a la energía, el universo, la meditación, frases de paz",
+  politico: "Político: relaciona el tema con política, partidos o ideología",
+  diplomatico: "Diplomático: equilibrado, considera todos los puntos de vista, muy considerado",
+  cristiano_ev: "Cristiano Evangélico: referencias bíblicas evangélicas, menciona a Dios y bendiciones frecuentemente",
+  cristiano_cat: "Cristiano Católico: referencias católicas tradicionales, menciona santos, la Virgen o el Papa",
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -70,7 +105,19 @@ serve(async (req) => {
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
     const body = await req.json();
-    const { transcription, programa, conductores, ciudades } = body;
+    const {
+      transcription,
+      programa,
+      conductores,
+      numConductores,
+      generoConductores,
+      tema,
+      ciudades,
+      longitud,
+      generaciones,
+      tonos,
+      modo,
+    } = body;
     const count = Math.min(25, Math.max(5, Number(body.count) || 10));
 
     if (!transcription || typeof transcription !== "string") {
@@ -90,21 +137,78 @@ serve(async (req) => {
     const safePrograma = typeof programa === "string" ? programa.slice(0, 200) : "";
     const safeConductores = typeof conductores === "string" ? conductores.slice(0, 200) : "";
     const safeCiudades = typeof ciudades === "string" ? ciudades.slice(0, 500) : "";
+    const safeTema = typeof tema === "string" ? tema.slice(0, 300) : "";
+    const safeNumConductores = typeof numConductores === "string" ? numConductores : "auto";
+    const safeGeneroConductores = typeof generoConductores === "string" ? generoConductores : "auto";
+    const safeLongitud = typeof longitud === "string" ? longitud : "variado";
+    const safeGeneraciones = Array.isArray(generaciones) ? generaciones.slice(0, 3) : [];
+    const safeTonos = Array.isArray(tonos) ? tonos.slice(0, 4) : [];
+    const safeModo = typeof modo === "string" ? modo : "normal";
 
     const ciudadesText = safeCiudades === "__MEXICO__"
       ? "Genera ciudades reales de México de forma aleatoria para cada comentario (variadas, no solo las más grandes)"
       : `Ciudades disponibles: ${safeCiudades || "cualquier ciudad hispanohablante"}`;
+
+    // Build conductor context
+    let conductorContext = "";
+    if (safeNumConductores === "uno") conductorContext += "El programa tiene UN solo conductor.";
+    else if (safeNumConductores === "varios") conductorContext += "El programa tiene VARIOS conductores.";
+    else conductorContext += "Detecta automáticamente cuántos conductores hay según la transcripción.";
+
+    if (safeGeneroConductores === "masculino") conductorContext += " El/los conductor(es) son MASCULINOS.";
+    else if (safeGeneroConductores === "femenino") conductorContext += " El/los conductor(es) son FEMENINOS.";
+    else conductorContext += " Detecta automáticamente el género según la transcripción.";
+
+    // Build longitud instruction
+    let longitudInstruction = "";
+    if (safeLongitud === "cortos") {
+      longitudInstruction = "LONGITUD REQUERIDA: Comentarios CORTOS (15-35 palabras). Breves y directos, ideales para menciones rápidas.";
+    } else if (safeLongitud === "largos") {
+      longitudInstruction = "LONGITUD REQUERIDA: Comentarios LARGOS con ejemplos (80-120 palabras). Extensos con historias personales. Incluye experiencias y ejemplos relacionados al tema.";
+    } else {
+      longitudInstruction = "LONGITUD: Variada y libre. El modelo decide la longitud de forma natural.";
+    }
+
+    // Build generaciones instruction
+    let generacionesInstruction = "";
+    if (safeGeneraciones.length > 0) {
+      const labels = safeGeneraciones.map((g: string) => GENERACION_LABELS[g] || g).filter(Boolean);
+      generacionesInstruction = `GRUPOS DEMOGRÁFICOS: Distribuye los comentarios entre estos perfiles: ${labels.join(" | ")}. Adapta el lenguaje, slang, tecnología y referencias a cada generación.`;
+    }
+
+    // Build tonos instruction
+    let tonosInstruction = "";
+    if (safeTonos.length > 0) {
+      const labels = safeTonos.map((t: string) => TONO_LABELS[t] || t).filter(Boolean);
+      tonosInstruction = `TONO Y ESTILO: Mezcla estos estilos en los comentarios: ${labels.join(" | ")}. Distribuye los tonos de forma natural y variada.`;
+    }
+
+    // Prompt libre mode adds a note
+    const modoNote = safeModo === "prompt_libre"
+      ? "MODO PROMPT LIBRE: Tienes libertad creativa total para generar comentarios únicos y originales, sin seguir plantillas. Sorprende con variedad extrema."
+      : "";
 
     const userPrompt = `════════════════════════════════════
 DATOS DEL PROGRAMA A USAR
 ════════════════════════════════════
 Programa: ${safePrograma || "No especificado"}
 Conductores: ${safeConductores || "No especificado"}
+${conductorContext}
+${safeTema ? `Tema principal: ${safeTema}` : ""}
 ${ciudadesText}
-Cantidad de comentarios a generar: ${count || 10}
+Cantidad de comentarios a generar: ${count}
+
+════════════════════════════════════
+INSTRUCCIONES DE GENERACIÓN
+════════════════════════════════════
+${longitudInstruction}
+${generacionesInstruction}
+${tonosInstruction}
+${modoNote}
+
 Transcripción del audio: ${transcription}
 
-Genera exactamente ${count || 10} comentarios. Cada uno debe incluir:
+Genera exactamente ${count} comentarios. Cada uno debe incluir:
 - Nombre completo ficticio pero verosímil (nombre y apellido latinoamericanos)
 - Ciudad (tomada de la lista o generada aleatoriamente de México si aplica)
 - El comentario en sí`;
