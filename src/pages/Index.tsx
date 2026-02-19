@@ -1,29 +1,39 @@
 import { useState, useCallback } from "react";
-import { Lightbulb, Copy, RefreshCw, Loader2 } from "lucide-react";
+import { Copy, RefreshCw, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Slider } from "@/components/ui/slider";
-import { Switch } from "@/components/ui/switch";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import AudioUploader from "@/components/AudioUploader";
 import CommentCard, { type Comment } from "@/components/CommentCard";
+import CommentConfig, { type CommentConfigState } from "@/components/CommentConfig";
 import logo from "@/assets/logo.jpg";
+
+const defaultConfig: CommentConfigState = {
+  modo: "normal",
+  programa: "",
+  conductores: "",
+  numConductores: "auto",
+  generoConductores: "auto",
+  tema: "",
+  ciudades: "",
+  mexicanCities: false,
+  count: 10,
+  longitud: "variado",
+  generaciones: [],
+  tonos: [],
+};
 
 const Index = () => {
   const [transcription, setTranscription] = useState<string | null>(null);
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [isTranscribing, setIsTranscribing] = useState(false);
-  const [programa, setPrograma] = useState("");
-  const [conductores, setConductores] = useState("");
-  const [ciudades, setCiudades] = useState("");
-  const [mexicanCities, setMexicanCities] = useState(false);
-  const [count, setCount] = useState(10);
+  const [config, setConfig] = useState<CommentConfigState>(defaultConfig);
   const [comments, setComments] = useState<Comment[]>([]);
   const [generating, setGenerating] = useState(false);
 
-  // hasAudio derived from transcription state
+  const handleConfigChange = useCallback((updates: Partial<CommentConfigState>) => {
+    setConfig((prev) => ({ ...prev, ...updates }));
+  }, []);
 
   const handleAudioReady = useCallback(async (file: File) => {
     setAudioFile(file);
@@ -49,7 +59,7 @@ const Index = () => {
       }
       const data = await res.json();
       setTranscription(data.transcription);
-      setAudioFile(null); // release file reference
+      setAudioFile(null);
     } catch (err) {
       console.error(err);
       toast({ title: "Error", description: "No se pudo transcribir el audio", variant: "destructive" });
@@ -73,10 +83,17 @@ const Index = () => {
       const { data, error } = await supabase.functions.invoke("generate-comments", {
         body: {
           transcription,
-          programa,
-          conductores,
-          ciudades: mexicanCities ? "__MEXICO__" : ciudades,
-          count,
+          programa: config.programa,
+          conductores: config.conductores,
+          numConductores: config.numConductores,
+          generoConductores: config.generoConductores,
+          tema: config.tema,
+          ciudades: config.mexicanCities ? "__MEXICO__" : config.ciudades,
+          count: config.count,
+          longitud: config.longitud,
+          generaciones: config.generaciones,
+          tonos: config.tonos,
+          modo: config.modo,
         },
       });
       if (error) throw error;
@@ -125,68 +142,10 @@ const Index = () => {
           )}
         </div>
 
-        {/* Config Fields */}
-        <div className="space-y-4 mb-8">
-          <div>
-            <Label className="font-bold">Programa</Label>
-            <Input
-              placeholder="Ej: Padres Invencibles"
-              value={programa}
-              onChange={(e) => setPrograma(e.target.value)}
-              className="mt-1"
-            />
-          </div>
-          <div>
-            <Label className="font-bold">Conductores</Label>
-            <Input
-              placeholder="Ej: Eustolia y Moy"
-              value={conductores}
-              onChange={(e) => setConductores(e.target.value)}
-              className="mt-1"
-            />
-          </div>
-          <div>
-            <Label className="font-bold">Ciudades</Label>
-            <Input
-              placeholder="Ej: Barcelona, Guadalajara, Mendoza"
-              value={ciudades}
-              onChange={(e) => setCiudades(e.target.value)}
-              disabled={mexicanCities}
-              className="mt-1"
-            />
-            <div className="flex items-center gap-2 mt-2">
-              <Switch
-                checked={mexicanCities}
-                onCheckedChange={setMexicanCities}
-              />
-              <span className="text-sm text-muted-foreground">Ciudades de México</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Comment Count */}
+        {/* Config Section */}
         <div className="mb-8">
-          <div className="flex items-center justify-between mb-2">
-            <Label className="font-bold">Cantidad de Comentarios</Label>
-            <span className="text-3xl font-bold">{count}</span>
-          </div>
-          <Slider
-            value={[count]}
-            onValueChange={(v) => setCount(v[0])}
-            min={5}
-            max={25}
-            step={1}
-            className="mb-2"
-          />
-          <div className="flex justify-between text-xs text-muted-foreground">
-            <span>Mínimo (5)</span>
-            <span>Recomendado (10)</span>
-            <span>Máximo (25)</span>
-          </div>
-          <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
-            <Lightbulb className="h-4 w-4 text-yellow-500" />
-            Mayor cantidad = más variedad, pero mayor tiempo de generación
-          </div>
+          <h2 className="text-lg font-bold mb-4">Generar Comentarios</h2>
+          <CommentConfig config={config} onChange={handleConfigChange} />
         </div>
 
         {/* Generate Button */}
